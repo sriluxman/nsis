@@ -42,6 +42,12 @@
 #define IDC_LICENSEAGREE                1034
 #define IDC_LICENSEDISAGREE             1035
 
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH
+#define IDC_INFOTEXT2					1050
+#define IDC_PROGRESS2					1051
+// *** BR_END ***
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

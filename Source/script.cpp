@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -395,11 +395,87 @@ parse_again:
       return PS_OK;
     }
 
-    int istrue=0, mod=0;
+    int istrue=0, mod=0, logicneg=0;
 
     if (tkid == TOK_P_IF) {
-      res = pp_boolifyexpression(line, istrue, true);
-      if (res != PS_OK) return res;
+      const TCHAR *cmdnam = line.gettoken_str(0); // Must save name now before eattoken!
+      if (!_tcscmp(line.gettoken_str(1),_T("!")))
+        logicneg++, line.eattoken();
+
+      if (line.getnumtokens() == 2)
+        istrue = line.gettoken_number(1) || line.gettoken_int(1);
+
+      else if (line.getnumtokens() == 3) {
+        if (!_tcsicmp(line.gettoken_str(1),_T("/fileexists"))) {
+          TCHAR *fc = my_convert(line.gettoken_str(2));
+          tstring dir = get_dir_name(fc), spec = get_file_name(fc);
+          my_convert_free(fc);
+          if (dir == spec) dir = _T("."); 
+
+          boost::scoped_ptr<dir_reader> dr( new_dir_reader() );
+          dr->hack_simpleexcluded().erase(_T("."));
+          dr->read(dir);
+
+          for (dir_reader::iterator fit = dr->files().begin();
+             fit != dr->files().end() && !istrue; fit++)
+          {
+            if (dir_reader::matches(*fit, spec)) istrue = true;
+          }
+          if (!istrue) for (dir_reader::iterator dit = dr->dirs().begin();
+             dit != dr->dirs().end() && !istrue; dit++)
+          {
+            if (dir_reader::matches(*dit, spec)) istrue = true;
+          }
+        }
+        else PRINTHELPEX(cmdnam)
+      }
+
+      else if (line.getnumtokens() == 4) {
+        mod = line.gettoken_enum(2,
+          _T("==\0!=\0S==\0S!=\0")
+          _T("=\0<>\0<=\0<\0>\0>=\0")
+          _T("&\0&&\0|\0||\0")
+          );
+
+        int cnv1 = 1, cnv2 = 1;
+        switch(mod) {
+          case 0:
+            istrue = _tcsicmp(line.gettoken_str(1),line.gettoken_str(3)) == 0; break;
+          case 1:
+            istrue = _tcsicmp(line.gettoken_str(1),line.gettoken_str(3)) != 0; break;
+          case 2:
+            istrue = _tcscmp(line.gettoken_str(1),line.gettoken_str(3)) == 0; break;
+          case 3:
+            istrue = _tcscmp(line.gettoken_str(1),line.gettoken_str(3)) != 0; break;
+          case 4:
+             istrue = line.gettoken_number(1,&cnv1) == line.gettoken_number(3,&cnv2); break;
+          case 5:
+             istrue = line.gettoken_number(1,&cnv1) != line.gettoken_number(3,&cnv2); break;
+          case 6:
+            istrue = line.gettoken_number(1,&cnv1) <= line.gettoken_number(3,&cnv2); break;
+          case 7:
+            istrue = line.gettoken_number(1,&cnv1) <  line.gettoken_number(3,&cnv2); break;
+          case 8:
+            istrue = line.gettoken_number(1,&cnv1) >  line.gettoken_number(3,&cnv2); break;
+          case 9:
+            istrue = line.gettoken_number(1,&cnv1) >= line.gettoken_number(3,&cnv2); break;
+          case 10:
+            istrue = (line.gettoken_int(1,&cnv1) & line.gettoken_int(3,&cnv2)) != 0; break;
+          case 11:
+            istrue = line.gettoken_int(1,&cnv1) && line.gettoken_int(3,&cnv2); break;
+          case 12:
+          case 13:
+            istrue = line.gettoken_int(1,&cnv1) || line.gettoken_int(3,&cnv2); break;
+          default:
+            PRINTHELPEX(cmdnam)
+        }
+        if (!cnv1 || !cnv2) {
+          warning_fl(DW_PARSE_BADNUMBER, _T("Invalid number: \"%") NPRIs _T("\""), line.gettoken_str(!cnv1 ? 1 : 3));
+        }
+      }
+      else PRINTHELPEX(cmdnam)
+        
+      if (logicneg) istrue = !istrue;
     }
     else {
   
@@ -2496,8 +2572,6 @@ int CEXEBuild::doCommand(int which_token, LineParser &line)
     case TOK_P_ECHO:
       SCRIPT_MSG(_T("%") NPRIs _T(" (%") NPRIs _T(":%d)\n"), line.gettoken_str(1),curfilename,linecnt);
     return PS_OK;
-    case TOK_P_ASSERT:
-    return pp_assert(line);
     case TOK_P_SEARCHPARSESTRING:
     return pp_searchparsestring(line);
     case TOK_P_SEARCHREPLACESTRING:
@@ -2843,7 +2917,7 @@ int CEXEBuild::doCommand(int which_token, LineParser &line)
           td.FreeSavedTemplate(dlg);
         }
         catch (exception& err) {
-          ERROR_MSG(_T("Error while trimming branding text control: %") NPRIs _T("\n"), CtoTStrParam(err.what()));
+          ERROR_MSG(_T("Error while triming branding text control: %") NPRIs _T("\n"), CtoTStrParam(err.what()));
           return PS_ERROR;
         }
 #else
@@ -5188,6 +5262,73 @@ int CEXEBuild::doCommand(int which_token, LineParser &line)
     return PS_ERROR;
 #endif //~ NSIS_CONFIG_PLUGIN_SUPPORT
 
+    // *** BR_START ***
+    // Added by B&R Industrial Automation GmbH
+	case TOK_GETPROGRESS:
+	{
+      ent.which=EW_GETPROGRESS;
+      ent.offsets[0]=GetUserVarIndex(line, 1);
+      if (ent.offsets[0]<0) PRINTHELP()
+      SCRIPT_MSG(_T("GetProgress %s"),line.gettoken_str(1));
+      return add_entry(&ent);
+	}
+
+	case TOK_SET_SUBPROGRESS:
+	{
+      ent.which=EW_SET_SUBPROGRESS;
+      ent.offsets[0]=add_string(line.gettoken_str(1));
+      SCRIPT_MSG(_T("SetSubProgress %s"),line.gettoken_str(1));
+      return add_entry(&ent);
+	}
+
+    case TOK_ENABLE_ASYNC_PROGRESS_UPDATE:
+	{
+      ent.which=EW_ENABLE_ASYNC_PROGRESS_UPDATE;
+      ent.offsets[0]=add_string(line.gettoken_str(1));
+      if (ent.offsets[0]<0) PRINTHELP()
+      SCRIPT_MSG(_T("EnableAsyncProgressUpdate %s\n"),line.gettoken_str(1));
+      return add_entry(&ent);
+	}
+
+    case TOK_DISABLE_ASYNC_PROGRESS_UPDATE:
+	{
+      ent.which=EW_DISABLE_ASYNC_PROGRESS_UPDATE;
+      SCRIPT_MSG(_T("DisableAsyncProgressUpdate"));
+      return add_entry(&ent);
+	}
+
+    case TOK_UPDATE_INFO_TEXT_IN_MAIN_PAGE:
+	{
+      ent.which=EW_UPDATE_INFO_TEXT_IN_MAIN_PAGE;
+      ent.offsets[0]=add_string(line.gettoken_str(1));
+	  ent.offsets[1]=add_string(line.gettoken_str(2));
+      SCRIPT_MSG(_T("UpdateInfoTextInMainPage %s \"%s\"\n"),line.gettoken_str(1),line.gettoken_str(2));
+      return add_entry(&ent);
+	}
+
+    case TOK_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS:
+	{
+      ent.which=EW_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS;
+      ent.offsets[0]=add_string(line.gettoken_str(1));
+      SCRIPT_MSG(_T("UpdateInfoTextForSubProgress \"%s\"\n"),line.gettoken_str(1));
+      return add_entry(&ent);
+	}
+
+	case TOK_ENABLE_PROGRESS_BAR_MARQUEE_MODE:
+	{
+      ent.which=EW_ENABLE_PROGRESS_BAR_MARQUEE_MODE;
+      SCRIPT_MSG(_T("EnableProgressBarMarqueeMode"));
+      return add_entry(&ent);
+	}
+
+    case TOK_DISABLE_PROGRESS_BAR_MARQUEE_MODE:
+	{
+      ent.which=EW_DISABLE_PROGRESS_BAR_MARQUEE_MODE;
+      SCRIPT_MSG(_T("DisableProgressBarMarqueeMode"));
+      return add_entry(&ent);
+	}
+    // *** BR_END ***	
+
     default:
       break;
   }
@@ -5302,33 +5443,52 @@ int CEXEBuild::add_file(const tstring& dir, const tstring& file, int attrib, con
   const TCHAR *newfn = newfn_s.c_str();
   const TCHAR *filename = file.c_str();
   MMapFile mmap;
-  UINT64 filesize;
+  DWORD len;
 
 #ifdef _WIN32
-  HANDLE hFile = mmap.openfilehelper(newfn, filesize);
+  HANDLE hFile = CreateFile(
+    newfn,
+    GENERIC_READ,
+    FILE_SHARE_READ,
+    NULL,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+    NULL
+  );
   if (hFile == INVALID_HANDLE_VALUE)
   {
     ERROR_MSG(_T("%") NPRIs _T("File: failed opening file \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
     return PS_ERROR;
   }
   MANAGE_WITH(hFile, CloseHandle);
-#else
-  FILE *hFile = mmap.openfilehelper(newfn, filesize);
-  if (!hFile)
-  {
-    ERROR_MSG(_T("%") NPRIs _T("File: failed opening file \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
-    return PS_ERROR;
-  }
-  MANAGE_WITH(hFile, fclose);
-  const int fd = fileno(hFile);
-#endif
-  if (!mmap.setfile(hFile, filesize) && filesize)
+
+  len = GetFileSize(hFile, NULL);
+  if (len && !mmap.setfile(hFile, len))
   {
     ERROR_MSG(_T("%") NPRIs _T("File: failed creating mmap of \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
     return PS_ERROR;
   }
-  DWORD len = (DWORD) filesize;
-  if (len != filesize) len = 0xffffffffUL - 1024; // truncate_cast but as large as possible
+#else // !_WIN32
+  int fd = OPEN(newfn, O_RDONLY);
+  if (fd == -1)
+  {
+    ERROR_MSG(_T("%") NPRIs _T("File: failed opening file \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
+    return PS_ERROR;
+  }
+  MANAGE_WITH(fd, close); // Will auto-close(2) fd
+
+  struct stat s;
+  if (fstat(fd, &s)) {
+    ERROR_MSG(_T("%") NPRIs _T("File: failed stating file \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
+    return PS_ERROR;
+  }
+  len = (DWORD) s.st_size;
+  if (len && !mmap.setfile(fd, len))
+  {
+    ERROR_MSG(_T("%") NPRIs _T("File: failed creating mmap of \"%") NPRIs _T("\"\n"),generatecode?_T(""):_T("Reserve"),newfn);
+    return PS_ERROR;
+  }
+#endif // ~_WIN32
 
   if (generatecode&1)
     section_add_size_kb((len+1023)/1024);
@@ -5383,9 +5543,9 @@ int CEXEBuild::add_file(const tstring& dir, const tstring& file, int attrib, con
     DWORD s=getcurdbsize()-last_build_datablock_used;
     if (s) s-=4;
     if (s != len)
-      SCRIPT_MSG(_T(" %u/%u bytes\n"),s,len);
+      SCRIPT_MSG(_T(" %d/%d bytes\n"),s,len);
     else
-      SCRIPT_MSG(_T(" %u bytes\n"),len);
+      SCRIPT_MSG(_T(" %d bytes\n"),len);
   }
 
   if (generatecode)

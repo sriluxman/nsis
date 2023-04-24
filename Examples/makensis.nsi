@@ -217,7 +217,6 @@ ${MementoSection} "NSIS Core Files (required)" SecCore
   File ..\Include\Win\WinUser.nsh
   File ..\Include\Win\COM.nsh
   File ..\Include\Win\Propkey.nsh
-  File ..\Include\Win\RestartManager.nsh
 
   SetOutPath $INSTDIR\Docs\StrFunc
   File ..\Docs\StrFunc\StrFunc.txt
@@ -332,7 +331,6 @@ ${MementoSection} "Script Examples" SecExample
   File ..\Examples\WordFunc.ini
   File ..\Examples\WordFuncTest.nsi
   File ..\Examples\Memento.nsi
-  File ..\Examples\MultiUser.nsi
   File ..\Examples\unicode.nsi
   File ..\Examples\NSISMenu.nsi
 

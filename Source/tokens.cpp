@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ typedef struct
   int id;
   const TCHAR *name;
   int num_parms; // minimum number of parameters
-  int opt_parms; // optional parameters, usually 0, can be -1 for unlimited.
+  int opt_parms; // optional parmaters, usually 0, can be -1 for unlimited.
   const TCHAR *usage_str;
   int placement; // where the token can be placed
 } tokenType;
@@ -292,7 +292,6 @@ static tokenType tokenlist[TOK__LAST] =
 {TOK_P_ECHO,_T("!echo"),1,0,_T("message"),TP_ALL},
 {TOK_P_WARNING,_T("!warning"),0,1,_T("[warning_message]"),TP_ALL},
 {TOK_P_ERROR,_T("!error"),0,1,_T("[error_message]"),TP_ALL},
-{TOK_P_ASSERT,_T("!assert"),2,2,_T("value [op value2] message"),TP_ALL},
 
 {TOK_P_VERBOSE,_T("!verbose"),1,-1,_T("verbose_level | push | pop [...]"),TP_ALL},
 {TOK_P_PRAGMA,_T("!pragma"),1,-1,_T("warning <enable|disable|default|error|warning> <code|all> | warning <push|pop>"),TP_ALL},
@@ -335,6 +334,18 @@ static tokenType tokenlist[TOK__LAST] =
 {TOK_VI_SETPRODUCTVERSION,_T("VIProductVersion"),1,0,_T("version_string_X.X.X.X"),TP_GLOBAL},
 {TOK_VI_SETFILEVERSION,_T("VIFileVersion"),1,0,_T("version_string_X.X.X.X"),TP_GLOBAL},
 {TOK_LOCKWINDOW,_T("LockWindow"),1,0,_T("(on|off)"),TP_CODE},
+
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH
+{TOK_GETPROGRESS,_T("GetProgress"),1,0,_T("$(user_var: current_progress)"),TP_CODE},
+{TOK_SET_SUBPROGRESS,_T("SetSubProgress"),1,0,_T("new_value_for_subprogress"),TP_CODE},
+{TOK_ENABLE_ASYNC_PROGRESS_UPDATE,_T("EnableAsyncProgressUpdate"),1,0,_T("hwnd_main_window"),TP_CODE},
+{TOK_DISABLE_ASYNC_PROGRESS_UPDATE,_T("DisableAsyncProgressUpdate"),0,0,_T(""),TP_CODE},
+{TOK_UPDATE_INFO_TEXT_IN_MAIN_PAGE,_T("UpdateInfoTextInMainPage"),2,0,_T("hwnd_main_window info_text"),TP_CODE},
+{TOK_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS,_T("UpdateInfoTextForSubProgress"),1,0,_T("info_text"),TP_CODE},
+{TOK_ENABLE_PROGRESS_BAR_MARQUEE_MODE,_T("EnableProgressBarMarqueeMode"),0,0,_T(""),TP_CODE},
+{TOK_DISABLE_PROGRESS_BAR_MARQUEE_MODE,_T("DisableProgressBarMarqueeMode"),0,0,_T(""),TP_CODE}
+// *** BR_END ***
 };
 
 const TCHAR* CEXEBuild::get_commandtoken_name(int tok)

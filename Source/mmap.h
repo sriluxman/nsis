@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@
 
 #include "Platform.h"
 #include "growbuf.h"
-#include "tchar.h"
 
 #ifndef _WIN32
 #include <cstdio> // for FILE*
@@ -31,22 +30,17 @@
 class IMMap
 {
   public:
-    typedef DWORD maxfilesizetype; // TODO: Change to UINT64
-    static inline UINT64 getmaxoffset() { return INT_MAX; } // NSIS offset limit is 31 bits right now
-
     virtual void resize(int newlen)=0;
     virtual int  getsize() const=0;
-    virtual void *get(int offset, size_t size) const=0;
-    virtual void *get(int offset, size_t *size) const=0;
-    virtual void *getmore(int offset, size_t size) const=0;
+    virtual void *get(int offset, int size) const=0;
+    virtual void *get(int offset, int *size) const=0;
+    virtual void *getmore(int offset, int size) const=0;
     virtual void release()=0;
-    virtual void release(void *view, size_t size)=0;
+    virtual void release(void *view, int size)=0;
     virtual void clear()=0;
     virtual void setro(BOOL bRO)=0;
-    virtual void flush(size_t num)=0;
+    virtual void flush(int num)=0;
     virtual ~IMMap() {}
-
-    virtual bool write_to_external_file(FILE*file, UINT64 size = ~(UINT64)0);
 };
 
 class MMapFile : public IMMap
@@ -56,8 +50,6 @@ class MMapFile : public IMMap
     void operator=(const MMapFile&);
 
   public:
-    static DWORD getmaxfilesize();
-
     MMapFile();
     virtual ~MMapFile();
 
@@ -76,7 +68,7 @@ class MMapFile : public IMMap
      * Creates the memory mapping object of the file with a mapping size.
      *
      * @param hFile The handle to the opened file.
-     * @param size The size of the memory mapped object. You cannot set
+     * @param dwSize The size of the memory mapped object.  You cannot set
      * this value to zero like with CreateFileMapping() because it will
      * immediately return.  Most likely, you want to set it to the size
      * of the file unless you want to only map a part of the file on
@@ -84,22 +76,9 @@ class MMapFile : public IMMap
      * @return Returns 1 on success, 0 on failure.
      */
 #ifdef _WIN32
-    bool setfile(HANDLE hFile, UINT64 size);
-private:
-    int internalsetfile(HANDLE hFile, DWORD dwSize);
+    int  setfile(HANDLE hFile, DWORD dwSize);
 #else
-    bool setfile(FILE*hFile, UINT64 size);
-private:
-    int internalsetfile(int hFile, DWORD dwSize);
-#endif
-
-public:
-    UINT64 setfile(const TCHAR*fpath);
-
-#ifdef _WIN32
-    static HANDLE openfilehelper(const TCHAR*fpath, UINT64 &size);
-#else
-    static FILE* openfilehelper(const TCHAR*fpath, UINT64 &size);
+    int  setfile(int hFile, DWORD dwSize);
 #endif
 
    /**
@@ -125,7 +104,7 @@ public:
      * @param offset The offset from the beginning of the file.
      * @param size The size of the memory map window.
      */
-    void *get(int offset, size_t size) const;
+    void *get(int offset, int size) const;
 
     /**
      * Set the memory map to a particular offset in the file and return the
@@ -136,7 +115,7 @@ public:
      * @param sizep [in/out] The size of the memory map window.  (In non-Win32
      * systems, the new size is written back out.)
      */
-    void *get(int offset, size_t *sizep) const;
+    void *get(int offset, int *sizep) const;
 
     /**
      * This function sets memory map and just hands you the pointer and
@@ -149,7 +128,7 @@ public:
      * @param offset The offset from the beginning of the file.
      * @param size The size of the memory map window.
      */
-    void *getmore(int offset, size_t size) const;
+    void *getmore(int offset, int size) const;
 
     /**
      * Releases the memory map currently being used.  Calls UnMapViewOfFile().
@@ -168,7 +147,7 @@ public:
      * @param pView The pointer to somewhere in a MemMapped object.
      * @param size The size of the object.  Used only in non-Win32 systems.
      */
-    void release(void *pView, size_t size);
+    void release(void *pView, int size);
 
     /**
      * Flushes the contents of the current memory map to disk.  Set size to 0
@@ -176,7 +155,7 @@ public:
      *
      * @param num The number of bytes to flush.  0 for everything.
      */
-    void flush(size_t num);
+    void flush(int num);
 
   private:
 #ifdef _WIN32
@@ -204,16 +183,16 @@ class MMapFake : public IMMap
 
     void set(const char *pMem, int iSize);
     int  getsize() const;
-    void *get(int offset, size_t size) const;
-    void *get(int offset, size_t *size) const;
-    void *getmore(int offset, size_t size) const;
+    void *get(int offset, int size) const;
+    void *get(int offset, int *size) const;
+    void *getmore(int offset, int size) const;
 
     void resize(int n);
     void release();
-    void release(void *p, size_t size);
+    void release(void *p, int size);
     void clear();
     void setro(BOOL b);
-    void flush(size_t b);
+    void flush(BOOL b);
 
   private:
     const char *m_pMem;
@@ -222,10 +201,10 @@ class MMapFake : public IMMap
 
 /**
  * A data structure that can be used to create a scratch file to do
- * work in. When it's smaller than 16mb, it's all in memory using the
- * GrowBuf class. But when it gets larger than 16mb, then it uses
+ * work in.  When it's smaller than 16mb, it's all in memory using the
+ * GrowBuf class.  But when it gets biggered than 16mb, then it uses
  * the MMapFile class to create a memory map to a temporary file and
- * then uses it. This reduces memory overhead of the installer.
+ * then uses it.  This reduces memory overhead of the installer.
  *
  * This is sort of our virtual memory manager.
  */
@@ -245,16 +224,13 @@ class MMapBuf : public IGrowBuf, public IMMap
     int  getsize() const;
     int  getlen() const;
     void *get() const;
-    void *get(int offset, size_t *sizep) const;
-    void *get(int offset, size_t size) const;
-    void *getmore(int offset, size_t size) const;
+    void *get(int offset, int *sizep) const;
+    void *get(int offset, int size) const;
+    void *getmore(int offset, int size) const;
     void release();
-    void release(void *pView, size_t size);
+    void release(void *pView, int size);
     void clear();
-    void flush(size_t num);
-
-  protected:
-    static inline int getmodethreshold() { return 16 << 20; }
+    void flush(int num);
 
   private:
     GrowBuf m_gb;

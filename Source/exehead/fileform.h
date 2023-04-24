@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -199,6 +199,18 @@ enum
 #ifdef NSIS_LOCKWINDOW_SUPPORT
   EW_LOCKWINDOW,
 #endif
+
+  // *** BR_START ***
+  // Added by B&R Industrial Automation GmbH
+  EW_GETPROGRESS,
+  EW_SET_SUBPROGRESS,
+  EW_ENABLE_ASYNC_PROGRESS_UPDATE,
+  EW_DISABLE_ASYNC_PROGRESS_UPDATE,
+  EW_UPDATE_INFO_TEXT_IN_MAIN_PAGE,
+  EW_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS,
+  EW_ENABLE_PROGRESS_BAR_MARQUEE_MODE,
+  EW_DISABLE_PROGRESS_BAR_MARQUEE_MODE,
+  // *** BR_END ***
 
 #ifdef _UNICODE     // opcodes available only in Unicode installers must be at the end of the enumeration
 #ifdef NSIS_SUPPORT_FILEFUNCTIONS
@@ -612,7 +624,7 @@ typedef struct {
 // the following are only used/implemented in exehead, not makensis.
 
 #if NSIS_MAX_EXEDATASIZE <= 0xffffffffUL
-#define MAXEXEDATASIZETYPE UINT // Maximum size of .exe including compressed installer data. (Unsigned allows size including 3rd-party appended data to be 4 GiB instead of 2 GiB)
+#define MAXEXEDATASIZETYPE UINT // Maximum size of .exe including compressed installer data. (Unsigned allows size including 3rd-party appeded data to be 4 GiB instead of 2 GiB)
 #endif
 #define MAXSIZETYPE UINT
 

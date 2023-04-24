@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -129,7 +129,11 @@ CEXEBuild::CEXEBuild(signed char pponly, bool warnaserror) :
   definedlist.add(_T("NSIS_VERSION"), NSIS_VERSION);
   definedlist.add(_T("NSIS_PACKEDVERSION"), NSIS_PACKEDVERSION);
 
-  m_target_type=TARGET_X86UNICODE;
+  // *** BR_START ***
+  // Modified by B&R Industrial Automation GmbH
+  // Set default target to ANSI instead of UNICODE, because B&R NSIS framework is not ready for UNICODE support yet.
+  m_target_type=TARGET_X86ANSI;
+  // *** BR_END ***
 #ifdef _WIN32
   if (sizeof(void*) > 4) m_target_type = TARGET_AMD64; // BUGBUG: scons 'TARGET_ARCH' should specify the default
 #endif
@@ -228,7 +232,7 @@ CEXEBuild::CEXEBuild(signed char pponly, bool warnaserror) :
 
   uninstall_mode=0;
   uninstall_size_full=0;
-  uninstall_size=UINT_MAX;
+  uninstall_size=-1;
 
   memset(&build_uninst,-1,sizeof(build_uninst));
 
@@ -378,8 +382,8 @@ CEXEBuild::CEXEBuild(signed char pponly, bool warnaserror) :
   m_ShellConstants.add(_T("RESOURCES_LOCALIZED"), CSIDL_RESOURCES_LOCALIZED, CSIDL_RESOURCES_LOCALIZED);
   m_ShellConstants.add(_T("CDBURN_AREA"), CSIDL_CDBURN_AREA, CSIDL_CDBURN_AREA);
 
-  // Constants that are not affected by SetShellVarContext
-  m_ShellConstants.add(_T("USERAPPDATA"), CSIDL_APPDATA, CSIDL_APPDATA|0x40); // 0x40 to differentiate it from $QUICKLAUNCH
+  // Contants that are not affected by SetShellVarContext
+  m_ShellConstants.add(_T("USERAPPDATA"), CSIDL_APPDATA, CSIDL_APPDATA);
   m_ShellConstants.add(_T("USERLOCALAPPDATA"), CSIDL_LOCAL_APPDATA, CSIDL_LOCAL_APPDATA);
   m_ShellConstants.add(_T("USERTEMPLATES"), CSIDL_TEMPLATES, CSIDL_TEMPLATES);
   m_ShellConstants.add(_T("USERSTARTMENU"), CSIDL_STARTMENU, CSIDL_STARTMENU);
@@ -632,7 +636,7 @@ int CEXEBuild::preprocess_string(TCHAR *out, const TCHAR *in, WORD codepage/*=CP
             int idxUserVar = m_UserVarNames.get(p, truncate_cast(int, (size_t)(pUserVarName - p)));
             if (idxUserVar >= 0)
             {
-              // Well, using variables inside string formatting doesn't mean
+              // Well, using variables inside string formating doens't mean
               // using the variable, because it will be always an empty string
               // which is also memory wasting
               // So the line below must be commented !??
@@ -868,19 +872,10 @@ int CEXEBuild::add_db_data(IMMap *mmap) // returns offset
   if (length && !build_compress_whole && build_compress)
   {
     // grow datablock so that there is room to compress into
-    int bufferlen, of = false, tmp = 0;
-    of |= !si_add(tmp, length, 1024);
-    of |= !si_add(tmp, tmp, length / 4); // give a nice 25% extra space
-    if (!of)
-    {
-      bufferlen = tmp;
-      of |= !si_add(tmp, st, bufferlen);
-      of |= !si_add(tmp, tmp, sizeof(int));
-    }
-    if (of) // we've hit a signed integer overflow (file is over 1.6 GB)
-      bufferlen = INT_MAX - st - sizeof(int); // so maximize compressor room and hope the file compresses well
-
-    db->resize(st + bufferlen + sizeof(int));
+    int bufferlen = length + 1024 + length / 4; // give a nice 25% extra space
+    if (st+bufferlen+(signed)sizeof(int) < 0) // we've hit a signed integer overflow (file is over 1.6 GB)
+        bufferlen = INT_MAX-st-sizeof(int); //   so maximize compressor room and hope the file compresses well
+      db->resize(st + bufferlen + sizeof(int));
 
     int n = compressor->Init(build_compress_level, build_compress_dict_size);
     if (n != C_OK)
@@ -2664,7 +2659,7 @@ int CEXEBuild::write_output(void)
 
   build_optimize_datablock=0;
 
-  UINT data_block_size_before_uninst = build_datablock.getlen();
+  int data_block_size_before_uninst = build_datablock.getlen();
 
   RET_UNLESS_OK( uninstall_generate() );
 
@@ -2880,7 +2875,7 @@ retry_output:
     unsigned int dbsize;
     UINT64 dbsizeu;
     dbsize = build_datablock.getlen();
-    if (uninstall_size > 0 && uninstall_size < UINT_MAX) dbsize -= uninstall_size;
+    if (uninstall_size>0) dbsize -= uninstall_size;
 
     if (build_compress_whole) {
       dbsizeu = dbsize;
@@ -2893,17 +2888,17 @@ retry_output:
       INFO_MSG(_T("Install data:             %10u%") NPRIs _T(" / %u%") NPRIs _T("\n"),
         cs.UInt(),cs.Scale(),us.UInt(),us.Scale()); // "123 / 456 bytes" or "123 KiB / 456 MiB"
     }
-    UINT future = (build_crcchk ? sizeof(int) : 0) + (uninstall_size > 0 && uninstall_size < UINT_MAX ? uninstall_size_full : 0);
+    UINT future = (build_crcchk ? sizeof(int) : 0) + (uninstall_size > 0 ? uninstall_size_full : 0);
     UINT maxsize = (~(UINT)0) - (total_usize + future), totsizadd = dbsizeu < maxsize ? (UINT)dbsizeu : maxsize;
     total_usize += totsizadd; // Might not be accurate, it is more important to not overflow the additions coming up
   }
 
-  if (uninstall_size < UINT_MAX)
+  if (uninstall_size>=0)
   {
     if (build_compress_whole)
-      INFO_MSG(_T("Uninstall code+data:                   (%u bytes)\n"),uninstall_size_full);
+      INFO_MSG(_T("Uninstall code+data:                   (%d bytes)\n"),uninstall_size_full);
     else
-      INFO_MSG(_T("Uninstall code+data:      %10u / %u bytes\n"),uninstall_size,uninstall_size_full);
+      INFO_MSG(_T("Uninstall code+data:          %6d / %d bytes\n"),uninstall_size,uninstall_size_full);
     total_usize += uninstall_size_full;
   }
 
@@ -3300,46 +3295,42 @@ int CEXEBuild::uninstall_generate()
     if (start_offset)
     {
       TCHAR* fpath;
+      unsigned long in_len;
       if (!(fpath = create_tempfile_path()))
       {
         ERROR_MSG(_T("Error: can't get temporary path\n"));
         return PS_ERROR;
       }
-      MANAGE_WITH(fpath, free);
-      FILE *hfile = FOPEN(fpath, ("wb"));
-      if (!hfile)
-      {
-        ERROR_MSG(_T("Error: failed opening file \"%") NPRIs _T("\"\n"), fpath);
-        return PS_ERROR;
-      }
-      int succ = udata.write_to_external_file(hfile);
-      fclose(hfile);
-      if (!succ)
+      size_t ret_size = write_octets_to_file(fpath, (unsigned char*)udata.get(0, udata.getlen()), udata.getlen());
+      udata.release();
+      if ((size_t)udata.getlen() != ret_size)
       {
         ERROR_MSG(_T("Error: can't write %d bytes to output\n"), udata.getlen());
+        free(fpath);
         return PS_ERROR;
       }
-      udata.clear();
-
       if (PS_OK != run_postbuild_cmds(postubuild_cmds, fpath, _T("UninstFinalize")))
       {
+        free(fpath);
         return PS_ERROR;
       }
-
-      MMapFile udata_in;
-      UINT64 udata_size;
-      if (!(udata_size = udata_in.setfile(fpath)))
-      {
-        ERROR_MSG(_T("Error: failed creating mmap of \"%") NPRIs _T("\"\n"), fpath);
-        return PS_ERROR;
-      }
-      if (udata_size > NSIS_MAX_EXEFILESIZE || add_db_data(&udata_in) < 0)
-        return PS_ERROR;
-
-      assert(NSIS_MAX_EXEFILESIZE <= ~(UINT32)0);
-      uninstall_size_full = (UINT32) udata_size;
-      udata_in.clear();
+      BYTE* in_buf = alloc_and_read_file(fpath, in_len);
       _tremove(fpath);
+      free(fpath);
+      if (!in_buf)
+      {
+        ERROR_MSG(_T("Error: can't read %d bytes from input\n"), in_len);
+        return PS_ERROR;
+      }
+      MMapBuf udata_in;
+      udata_in.add(in_buf, in_len);
+      free(in_buf);
+
+      if (add_db_data(&udata_in) < 0)
+        return PS_ERROR;
+
+      uninstall_size_full = udata_in.getlen();
+      udata_in.clear();
     }
     else
     {
@@ -3350,8 +3341,11 @@ int CEXEBuild::uninstall_generate()
       uninstall_size_full = fh.length_of_all_following_data+(int)m_unicon_size;
     }
 
+    udata.clear();
+
     // compressed size
     uninstall_size=build_datablock.getlen()-uninstdata_offset;
+
     SCRIPT_MSG(_T("Done!\n"));
   }
 #endif
@@ -3782,8 +3776,8 @@ again:
   // don't move this, depends on [un.]
   zero_offset=add_asciistring(_T("$0"));
 
-  // SetDetailsPrint none (don't update lastused)
-  ret=add_entry_direct(EW_SETFLAG, FLAG_OFFSET(status_update), add_intstring(6), -1);
+  // SetDetailsPrint none
+  ret=add_entry_direct(EW_SETFLAG, FLAG_OFFSET(status_update), add_intstring(6));
   if (ret != PS_OK) return ret;
 
   // StrCmp $PLUGINSDIR ""
@@ -3813,6 +3807,41 @@ again:
   // Pop $0
   ret=add_entry_direct(EW_PUSHPOP, var_zero, 1);
   if (ret != PS_OK) return ret;
+
+  // *** BR_START ***
+  // Added by B&R Industrial Automation GmbH	
+  // GetProgress
+  ret=add_entry_direct(EW_GETPROGRESS, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // SetSubProgress
+  ret=add_entry_direct(EW_SET_SUBPROGRESS, var_zero);
+  if (ret != PS_OK) return ret;  
+  
+  // EnableAsyncProgressUpdate
+  ret=add_entry_direct(EW_ENABLE_ASYNC_PROGRESS_UPDATE, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // DisableAsyncProgressUpdate
+  ret=add_entry_direct(EW_DISABLE_ASYNC_PROGRESS_UPDATE, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // UpdateInfoTextInMainPage
+  ret=add_entry_direct(EW_UPDATE_INFO_TEXT_IN_MAIN_PAGE, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // UpdateInfoTextForSubProgress
+  ret=add_entry_direct(EW_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // EnableProgressBarMarqueeMode
+  ret=add_entry_direct(EW_ENABLE_PROGRESS_BAR_MARQUEE_MODE, var_zero);
+  if (ret != PS_OK) return ret;
+
+  // DisableProgressBarMarqueeMode
+  ret=add_entry_direct(EW_DISABLE_PROGRESS_BAR_MARQUEE_MODE, var_zero);
+  if (ret != PS_OK) return ret;
+  // *** BR_END ***  
 
   // done
   if (add_label(_T("Initialize_____Plugins_done"))) return PS_ERROR;
@@ -3906,7 +3935,7 @@ int CEXEBuild::DeclaredUserVar(const TCHAR *szVarName)
     {
       if (!isSimpleChar(*pVarName))
       {
-        ERROR_MSG(_T("Error: invalid characters in variable name \"%") NPRIs _T("\", use only characters [a-z][A-Z][0-9], '.' and '_'\n"), szVarName);
+        ERROR_MSG(_T("Error: invalid characters in variable name \"%") NPRIs _T("\", use only characters [a-z][A-Z][0-9] and '_'\n"), szVarName);
         return PS_ERROR;
       }
       pVarName++;

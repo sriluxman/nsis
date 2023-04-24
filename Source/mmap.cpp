@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,43 +28,11 @@
 #endif
 #include "util.h"
 
-
-// =====
-// IMMap
-// =====
-
-bool IMMap::write_to_external_file(FILE*file, UINT64 size)
-{
-  if (~(size&0) == size) size = getsize();
-  if (getmaxoffset() < size)
-    return false;
-
-  UINT64 left = size, written = 0;
-  int offset = 0; // TODO: this will be removed after converting the mapping code to 64bit.
-  while (left > 0 && offset >= 0)
-  {
-    size_t chunksize = (size_t) STD_MIN(left, (UINT64) 1 << 20);
-    void *view = getmore(offset, chunksize);
-    written += fwrite(view, 1, chunksize, file);
-    release(view, chunksize);
-    left -= chunksize;
-    offset += (int)chunksize;
-  }
-  return written == size;
-}
-
-
 // ========
 // MMapFile
 // ========
 
 int MMapFile::m_iAllocationGranularity = 0;
-
-MMapFile::maxfilesizetype MMapFile::getmaxfilesize()
-{
-  assert((~(maxfilesizetype)0) > 0);
-  return (maxfilesizetype) STD_MIN((UINT64) (~(maxfilesizetype)0), (UINT64) Platform_GetMaxFileSize());
-}
 
 MMapFile::MMapFile()
 {
@@ -123,11 +91,10 @@ void MMapFile::setro(BOOL bRO)
   m_bReadOnly = bRO;
 }
 
-// TODO: Convert to UINT64. Right now the mapping is still limited to 31 bits.
 #ifdef _WIN32
-int MMapFile::internalsetfile(HANDLE hFile, DWORD dwSize)
+int MMapFile::setfile(HANDLE hFile, DWORD dwSize)
 #else
-int MMapFile::internalsetfile(int hFile, DWORD dwSize)
+int MMapFile::setfile(int hFile, DWORD dwSize)
 #endif
 {
   clear();
@@ -260,91 +227,26 @@ void MMapFile::resize(int newsize)
   }
 }
 
-#ifdef _WIN32
-bool MMapFile::setfile(HANDLE hFile, UINT64 size)
-{
-  maxfilesizetype maxsize = getmaxfilesize();
-  return size <= maxsize && internalsetfile(hFile, (maxfilesizetype) size);
-}
-
-HANDLE MMapFile::openfilehelper(const TCHAR*fpath, UINT64 &size)
-{
-  HANDLE hFile = CreateFile(fpath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-  if (hFile != INVALID_HANDLE_VALUE)
-  {
-    ULARGE_INTEGER size64;
-    if (GetFileSize64(hFile, size64))
-      size = size64.QuadPart;
-    else
-      CloseHandle(hFile), hFile = INVALID_HANDLE_VALUE;
-  }
-  return hFile;
-}
-#else
-bool MMapFile::setfile(FILE*hFile, UINT64 size)
-{
-  maxfilesizetype maxsize = getmaxfilesize();
-  return size <= maxsize && internalsetfile(fileno(hFile), (maxfilesizetype) size);
-}
-
-FILE* MMapFile::openfilehelper(const TCHAR*fpath, UINT64 &size)
-{
-  FILE *hFile = FOPEN(fpath, ("rb"));
-  if (hFile)
-  {
-    UINT64 size64 = get_file_size64(hFile);
-    if (size64 != invalid_file_size64)
-      size = size64;
-    else
-      fclose(hFile), hFile = 0;
-  }
-  return hFile;
-}
-#endif
-
-UINT64 MMapFile::setfile(const TCHAR*fpath)
-{
-  UINT64 size = 0;
-#ifdef _WIN32
-  HANDLE hFile = openfilehelper(fpath, size);
-  if (hFile != INVALID_HANDLE_VALUE)
-  {
-    if (!setfile(hFile, size)) size = 0;
-    CloseHandle(hFile);
-  }
-#else
-  FILE *hFile = openfilehelper(fpath, size);
-  if (hFile)
-  {
-    if (!setfile(hFile, size)) size = 0;
-    // NOTE: mmap() requires the file descriptor to stay open for get(), 
-    // otherwise get() will fail with errno code EBADFD (bad file descriptor).
-    m_hFile = hFile, m_bTempHandle = TRUE;
-  }
-#endif
-  return size;
-}
-
 int MMapFile::getsize() const
 {
   return m_iSize;
 }
 
-void *MMapFile::get(int offset, size_t size) const
+void *MMapFile::get(int offset, int size) const
 {
   return get(offset, &size);
 }
 
-void *MMapFile::get(int offset, size_t *sizep) const
+void *MMapFile::get(int offset, int *sizep) const
 {
   if (!sizep)
     return NULL;
 
   assert(!m_pView);
 
-  size_t size = *sizep;
+  int size = *sizep;
 
-  if (!m_iSize || offset + (int)size > m_iSize) // TODO: once m_iSize and offset is converted to unsigned 64bit, this typecast will disappear
+  if (!m_iSize || offset + size > m_iSize)
   {
     extern void quit(); extern int g_display_errors;
     if (g_display_errors) 
@@ -382,7 +284,7 @@ void *MMapFile::get(int offset, size_t *sizep) const
   return (void *)((char *)m_pView + offset - alignedoffset);
 }
 
-void *MMapFile::getmore(int offset, size_t size) const
+void *MMapFile::getmore(int offset, int size) const
 {
   void *pView;
   void *pViewBackup = m_pView;
@@ -411,7 +313,7 @@ void MMapFile::release()
   m_pView = NULL;
 }
 
-void MMapFile::release(void *pView, size_t size)
+void MMapFile::release(void *pView, int size)
 {
   if (!pView)
     return;
@@ -426,7 +328,7 @@ void MMapFile::release(void *pView, size_t size)
 #endif
 }
 
-void MMapFile::flush(size_t num)
+void MMapFile::flush(int num)
 {
   if (m_pView)
 #ifdef _WIN32
@@ -457,29 +359,29 @@ int MMapFake::getsize() const
   return m_iSize;
 }
 
-void *MMapFake::get(int offset, size_t size) const
+void *MMapFake::get(int offset, int size) const
 {
   return get(offset, &size);
 }
 
-void *MMapFake::get(int offset, size_t *size) const
+void *MMapFake::get(int offset, int *size) const
 {
-  if (!size || (offset + (int)*size > m_iSize)) // TODO: once m_iSize and offset is converted to unsigned 64bit, this typecast will disappear
+  if (!size || (offset + *size > m_iSize))
     return NULL;
   return (void *)(m_pMem + offset);
 }
 
-void *MMapFake::getmore(int offset, size_t size) const
+void *MMapFake::getmore(int offset, int size) const
 {
   return get(offset, size);
 }
 
 void MMapFake::resize(int n) {}
 void MMapFake::release() {}
-void MMapFake::release(void *p, size_t size) {}
+void MMapFake::release(void *p, int size) {}
 void MMapFake::clear() {}
 void MMapFake::setro(BOOL b) {}
-void MMapFake::flush(size_t b) {}
+void MMapFake::flush(BOOL b) {}
 
 // =======
 // MMapBuf
@@ -512,7 +414,7 @@ void MMapBuf::setro(BOOL bRO)
 
 void MMapBuf::resize(int newlen)
 {
-  if (!m_gb_u && newlen < getmodethreshold()) // still in db mode
+  if (!m_gb_u && newlen < (16 << 20)) // still in db mode
   {
     m_gb.resize(newlen);
     return;
@@ -524,8 +426,9 @@ void MMapBuf::resize(int newlen)
 
   if (newlen > m_alloc)
   {
-    if (!si_add(m_alloc, newlen, (16 << 20))) // add 16mb to top of mapping
-      m_alloc = INT_MAX; // we've hit a signed integer overflow
+    m_alloc = newlen + (16 << 20); // add 16mb to top of mapping
+    if (m_alloc < 0) // we've hit a signed integer overflow
+        m_alloc = INT_MAX;
 
     m_fm.resize(m_alloc);
 
@@ -541,7 +444,9 @@ void MMapBuf::resize(int newlen)
 
 int MMapBuf::getsize() const
 {
-  return getlen();
+  if (m_gb_u)
+    return m_fm.getsize();
+  return m_gb.getlen();
 }
 
 int MMapBuf::getlen() const
@@ -556,22 +461,22 @@ void *MMapBuf::get() const
   return get(0, m_alloc);
 }
 
-void *MMapBuf::get(int offset, size_t *sizep) const
+void *MMapBuf::get(int offset, int *sizep) const
 {
   if (!sizep)
     return NULL;
-  size_t size = *sizep;
+  int size = *sizep;
   return get(offset, size);
 }
 
-void *MMapBuf::get(int offset, size_t size) const
+void *MMapBuf::get(int offset, int size) const
 {
   if (m_gb_u)
     return m_fm.get(offset, size);
   return (void *) ((char *) m_gb.get() + offset);
 }
 
-void *MMapBuf::getmore(int offset, size_t size) const
+void *MMapBuf::getmore(int offset, int size) const
 {
   if (m_gb_u)
     return m_fm.getmore(offset, size);
@@ -584,7 +489,7 @@ void MMapBuf::release()
     m_fm.release();
 }
 
-void MMapBuf::release(void *pView, size_t size)
+void MMapBuf::release(void *pView, int size)
 {
   if (m_gb_u)
     m_fm.release(pView, size);
@@ -596,7 +501,7 @@ void MMapBuf::clear()
     m_fm.clear();
 }
 
-void MMapBuf::flush(size_t num)
+void MMapBuf::flush(int num)
 {
   if (m_gb_u)
     m_fm.flush(num);

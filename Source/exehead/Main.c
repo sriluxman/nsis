@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include "state.h"
 #include "ui.h"
 #include "lang.h"
+#include "state.h"
 #include "exec.h"
 #include "plugin.h"
 
@@ -425,7 +426,10 @@ end:
 
   if (m_Err)
   {
-    my_MessageBox(m_Err, MB_OK | MB_ICONSTOP | (IDOK << 21));
+    // *** BR_START ***
+    // Modified by B&R Industrial Automation GmbH	
+	my_MessageBox(m_Err, MB_OK | MB_ICONSTOP | (IDOK << 21), FALSE);
+	// *** BR_END ***
     ExitProcess(2);
   }
 

@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,12 @@ extern HWND m_curwnd;
 void NSISCALL build_g_logfile(void);
 #endif
 
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH	
+void NSISCALL UpdateProgress(HWND hWnd, PCOPYDATASTRUCT copyDataStruct);
+void NSISCALL UpdateInfoText(HWND hWnd, PCOPYDATASTRUCT copyDataStruct);
+// *** BR_END ***
+
 // sent to the last child window to tell it that the install thread is done
 #define WM_NOTIFY_INSTPROC_DONE (WM_USER+0x4)
 
@@ -52,5 +58,27 @@ void NSISCALL build_g_logfile(void);
 
 // Notifies the installation type has changed by the user
 #define WM_NOTIFY_INSTTYPE_CHANGED (WM_USER+0x20)
+
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH	
+#define MAX_PROGRESS 30000
+
+#define COMM_INTERFACE_ID_PROGRESS 	0x4711
+#define COMM_INTERFACE_ID_INFOTEXT	0x4712
+
+typedef struct CommInterfaceProgress
+{
+	int progress;
+}
+CommInterfaceProgress;
+
+#define MAX_INFO_TEXT_SIZE 250
+
+typedef struct CommInterfaceInfoText
+{
+	TCHAR infoText[MAX_INFO_TEXT_SIZE];
+}
+CommInterfaceInfoText;
+// *** BR_END ***
 
 #endif//_UI_H_

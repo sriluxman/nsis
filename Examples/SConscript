@@ -14,7 +14,6 @@ examples = Split("""
 	LogicLib.nsi
 	makensis.nsi
 	Memento.nsi
-	MultiUser.nsi
 	NSISMenu.nsi
 	one-section.nsi
 	primes.nsi

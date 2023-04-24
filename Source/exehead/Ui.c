@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft, Jeff Doozan and Contributors
+ * Copyright (C) 1999-2021 Nullsoft, Jeff Doozan and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,13 @@ int g_quit_flag; // set when Quit has been called (meaning bail out ASAP)
 #endif
 
 int progress_bar_pos, progress_bar_len;
+
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH
+BOOL isAsyncProgressUpdateActive	= FALSE;
+HWND hWndMainPage					= NULL;
+HWND globalHWND						= NULL;
+// *** BR_END ***
 
 #if NSIS_MAX_STRLEN < 1024
 static TCHAR g_tmp[4096];
@@ -515,6 +522,12 @@ INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
     if (uMsg == WM_INITDIALOG)
     {
       g_hwnd=hwndDlg;
+
+      // *** BR_START ***
+      // Added by B&R Industrial Automation GmbH	  
+	  globalHWND=hwndDlg;
+	  // *** BR_END ***
+	  
       m_hwndOK=GetDlgItem(hwndDlg,IDOK);
       m_hwndCancel=GetDlgItem(hwndDlg,IDCANCEL);
       SetDlgItemTextFromLang(hwndDlg,IDC_VERSTR,LANG_BRANDING);
@@ -1641,6 +1654,17 @@ static DWORD WINAPI install_thread(LPVOID p)
   }
 #endif
 
+  // *** BR_START ***
+  // Added by B&R Industrial Automation GmbH
+  progress_bar_len=sumsecsfield(code_size);
+  progress_bar_pos=0;
+
+  if (progresswnd == 0)
+  {
+    progresswnd = 1;
+  }
+  // *** BR_END ***
+
   // workaround for bug #1400995
   //
   // for an unexplained reason, MessageBox with MB_TOPMOST
@@ -1725,15 +1749,55 @@ static INT_PTR CALLBACK InstProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
       SetActiveCtl(insthwnd2);
     }
 
+    // *** BR_START ***
+    // Added/Modified by B&R Industrial Automation GmbH	
+    HWND progresswnd=GetUIItem(IDC_PROGRESS);
+    HWND progresswnd2=GetUIItem(IDC_PROGRESS2);
+    SendMessage(progresswnd,PBM_SETRANGE,0,MAKELPARAM(0,30000));
+    SendMessage(progresswnd2,PBM_SETRANGE,0,MAKELPARAM(0,30000));
+    if (g_flags&CH_FLAGS_PROGRESS_COLORED)
     {
-      HWND progresswnd=GetUIItem(IDC_PROGRESS);
-      SendMessage(progresswnd,PBM_SETRANGE,0,MAKELPARAM(0,30000));
-      if (g_flags&CH_FLAGS_PROGRESS_COLORED)
-      {
-        SendMessage(progresswnd,PBM_SETBARCOLOR,0,lb_fg);
-        SendMessage(progresswnd,PBM_SETBKCOLOR,0,lb_bg);
-      }
+      SendMessage(progresswnd,PBM_SETBARCOLOR,0,lb_fg);
+      SendMessage(progresswnd,PBM_SETBKCOLOR,0,lb_bg);
+      SendMessage(progresswnd2,PBM_SETBARCOLOR,0,lb_fg);
+      SendMessage(progresswnd2,PBM_SETBKCOLOR,0,lb_bg);
     }
+    
+    // We have to update some controls in uninstaller, if B&R NSIS MultipleProgress is used
+    if (g_is_uninstaller)
+    {
+        HWND infoTextWnd2=GetUIItem(IDC_INFOTEXT2);
+        
+        if (infoTextWnd2 && progresswnd2)
+        {
+            RECT    rectProgressBar;
+            RECT    rectShowDetailsButton;
+            RECT    rectListControl;
+            POINT   pointProgressBar;
+            
+            // Hide second progress bar and appropriate text box
+            ShowWindow(infoTextWnd2, SW_HIDE);
+            ShowWindow(progresswnd2, SW_HIDE);
+            
+            // Get dimensions of dialog controls
+            GetWindowRect(progresswnd, &rectProgressBar);
+            GetWindowRect(insthwndbutton, &rectShowDetailsButton);
+            GetWindowRect(linsthwnd, &rectListControl);
+            pointProgressBar.x  = rectProgressBar.left;
+            pointProgressBar.y  = rectProgressBar.top;
+            ScreenToClient(hwndDlg, &pointProgressBar);
+
+            // Move "Show details" button upwards, so that it's next to first progress bar
+            MoveWindow(insthwndbutton, pointProgressBar.x, pointProgressBar.y + (rectProgressBar.bottom - rectProgressBar.top) + 10, 
+                       rectShowDetailsButton.right - rectShowDetailsButton.left, rectShowDetailsButton.bottom - rectShowDetailsButton.top, TRUE);            
+
+            // Move "Details" list control upwards as well. Even the vertical size of the list control has to be increased.
+            MoveWindow(linsthwnd, pointProgressBar.x, pointProgressBar.y + (rectProgressBar.bottom - rectProgressBar.top) + 10,
+                       rectListControl.right - rectListControl.left, 
+                       rectListControl.bottom - rectListControl.top + (pointProgressBar.y + (rectProgressBar.bottom - rectProgressBar.top) + 10), TRUE);
+        }
+    }
+    // *** BR_END ***
 
     return FALSE;
   }
@@ -1747,6 +1811,30 @@ static INT_PTR CALLBACK InstProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
     ShowWindow(linsthwnd,SW_SHOWNA);
     SetActiveCtl(linsthwnd);
   }
+
+  // *** BR_START ***
+  // Added by B&R Industrial Automation GmbH	
+  if (uMsg == WM_COPYDATA)
+  {
+	PCOPYDATASTRUCT copyDataStruct = (PCOPYDATASTRUCT) lParam;
+	
+	switch (copyDataStruct->dwData)
+	{
+	  case COMM_INTERFACE_ID_PROGRESS:
+	  {
+		UpdateProgress(hwndDlg, copyDataStruct);
+	    break;
+	  }
+	  
+	  case COMM_INTERFACE_ID_INFOTEXT:
+	  {
+		UpdateInfoText(hwndDlg, copyDataStruct);
+	    break;
+	  }
+	}
+  }
+  // *** BR_END ***
+
   if (uMsg == WM_NOTIFY_INSTPROC_DONE)
   {
     if (g_quit_flag)
@@ -1824,4 +1912,53 @@ static INT_PTR CALLBACK InstProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
   //<<<
   return HandleStaticBkColor();
 }
+
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH	
+void NSISCALL UpdateProgress(HWND hWnd, PCOPYDATASTRUCT copyDataStruct)
+{
+  CommInterfaceProgress*	commData	 = (CommInterfaceProgress*) copyDataStruct->lpData;
+  HWND 						progressWnd2 = GetDlgItem(hWnd, IDC_PROGRESS2);
+  
+  if (progressWnd2)
+  {
+	SendMessage(progressWnd2, PBM_SETPOS, commData->progress, 0);
+  }
+}
+
+void NSISCALL UpdateInfoText(HWND hWnd, PCOPYDATASTRUCT copyDataStruct)
+{
+  CommInterfaceInfoText commData;
+  HWND 					progressWnd		= GetDlgItem(hWnd, IDC_PROGRESS);
+  HWND 					progressWnd2	= GetDlgItem(hWnd, IDC_PROGRESS2);
+  HWND					infoWnd2		= GetDlgItem(hWnd, IDC_INFOTEXT2);
+  HWND					listWnd			= GetDlgItem(hWnd, IDC_LIST1);
+  
+  mini_memcpy(&commData, copyDataStruct->lpData, sizeof (CommInterfaceInfoText));
+
+  if (infoWnd2)
+  {
+	SendMessage(infoWnd2, WM_SETTEXT, 0, (LPARAM) commData.infoText);
+  }
+  
+  if (listWnd)
+  {
+	LVITEM lvItem;
+ 
+	memset(&lvItem, 0, sizeof (LVITEM));
+	lvItem.mask 		= LVIF_TEXT;
+	lvItem.pszText		= commData.infoText;
+	lvItem.cchTextMax	= MAX_INFO_TEXT_SIZE;
+	lvItem.iItem 		= ListView_GetItemCount(listWnd);
+	lvItem.iSubItem 	= 0;
+	
+    SendMessage(listWnd, LVM_INSERTITEM, 0, (LPARAM) &lvItem);
+	ListView_EnsureVisible(listWnd, lvItem.iItem, 0);
+  } 
+  
+  UpdateWindow(progressWnd);
+  UpdateWindow(progressWnd2);
+}
+// *** BR_END ***
+
 #endif//NSIS_CONFIG_VISIBLE_SUPPORT

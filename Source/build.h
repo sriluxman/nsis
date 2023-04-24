@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -375,8 +375,6 @@ class CEXEBuild {
     bool inside_comment;
     int multiple_entries_instruction;  // 1 (true) or 0 (false)
 
-    int pp_boolifyexpression(LineParser&line, int &result, bool allow_logicneg = true, int ignore_last_tokens = 0);
-    int pp_assert(LineParser&line);
     int pp_macro(LineParser&line);
     int pp_macroundef(LineParser&line);
     int pp_insertmacro(LineParser&line);
@@ -619,7 +617,7 @@ class CEXEBuild {
 
     header build_header, build_uninst, *cur_header;
     int uninstall_mode; // Are we in uninstall mode?  Acts like a bool.
-    UINT32 uninstall_size,uninstall_size_full;
+    int uninstall_size,uninstall_size_full;
     int uninstaller_writes_used;
 
     TCHAR build_output_filename[1024];

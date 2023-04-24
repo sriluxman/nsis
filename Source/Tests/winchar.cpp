@@ -6,7 +6,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-// macro for fixing endianness
+// macro for fixing endianity
 #define _x(x) FIX_ENDIAN_INT16(WCHAR(x))
 
 // BUGBUG: These tests currently run as Ansi, it would be better if it respected defenv['UNICODE']

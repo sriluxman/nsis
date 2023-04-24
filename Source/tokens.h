@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,7 +127,6 @@ enum
   TOK_P_ECHO,
   TOK_P_WARNING,
   TOK_P_ERROR,
-  TOK_P_ASSERT,
 
   TOK_P_VERBOSE,
   TOK_P_PRAGMA,
@@ -323,7 +322,19 @@ enum
   TOK_GETERRORLEVEL,
   TOK_IFRTLLANG,
   TOK_LOCKWINDOW,
-
+  
+  // *** BR_START ***
+  // Added by B&R Industrial Automation GmbH  
+  TOK_GETPROGRESS,
+  TOK_SET_SUBPROGRESS,
+  TOK_ENABLE_ASYNC_PROGRESS_UPDATE,
+  TOK_DISABLE_ASYNC_PROGRESS_UPDATE,
+  TOK_UPDATE_INFO_TEXT_IN_MAIN_PAGE,
+  TOK_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS,
+  TOK_ENABLE_PROGRESS_BAR_MARQUEE_MODE,
+  TOK_DISABLE_PROGRESS_BAR_MARQUEE_MODE,
+  // *** BR_END ***
+  
   TOK__LAST,
   TOK__PLUGINCOMMAND
 };

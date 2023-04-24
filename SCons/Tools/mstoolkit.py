@@ -64,18 +64,16 @@ def get_msvctoolkit_paths():
 
 	# First, we get the shell folder for this user:
 	if not SCons.Util.can_read_reg:
-		raise SCons.Errors.InternalError("No Windows registry module was found")
+		raise SCons.Errors.InternalError, "No Windows registry module was found"
 
 	# look for toolkit
-	if 'VCToolkitInstallDir' in os.environ:
+	if os.environ.has_key('VCToolkitInstallDir'):
 		MSToolkitDir = os.path.normpath(os.environ['VCToolkitInstallDir'])
-	elif 'VCToolsInstallDir' in os.environ:
-		MSToolkitDir = os.path.normpath(os.environ['VCToolsInstallDir'])
 	else:
-		raise SCons.Errors.InternalError("Microsoft Visual C++ Toolkit directory was not found in the `VCToolkitInstallDir` or `VCToolsInstallDir` environment variables.")
+		raise SCons.Errors.InternalError, "Microsoft Visual C++ Toolkit 2003 directory was not found in the `VCToolkitInstallDir` environment variable."
 
 	# look for platform sdk
-	if 'MSSdk' in os.environ:
+	if os.environ.has_key('MSSdk'):
 		PlatformSDKDir = os.path.normpath(os.environ['MSSdk'])
 	else:
 		try:
@@ -86,7 +84,7 @@ def get_msvctoolkit_paths():
 				PlatformSDKDir = SCons.Util.RegGetValue(SCons.Util.HKEY_LOCAL_MACHINE, r'SOFTWARE\Microsoft\MicrosoftSDK\InstalledSDKs\8F9E5EF3-A9A5-491B-A889-C58EFFECE8B3\Install Dir')[0]
 				PlatformSDKDir = str(PlatformSDKDir)
 			except SCons.Util.RegError:
-				raise SCons.Errors.InternalError("The Platform SDK directory was not found in the registry or in the `MSSdk` environment variable.")
+				raise SCons.Errors.InternalError, "The Platform SDK directory was not found in the registry or in the `MSSdk` environment variable."
 
 	include_path = r'%s\include;%s\include' % (PlatformSDKDir, MSToolkitDir)
 	lib_path = r'%s\lib;%s\lib' % (PlatformSDKDir, MSToolkitDir)
@@ -95,11 +93,11 @@ def get_msvctoolkit_paths():
 
 def validate_vars(env):
 	"""Validate the PDB, PCH, and PCHSTOP construction variables."""
-	if 'PCH' in env and env['PCH']:
-		if not 'PCHSTOP' in env:
-			raise SCons.Errors.UserError("The PCHSTOP construction must be defined if PCH is defined.")
+	if env.has_key('PCH') and env['PCH']:
+		if not env.has_key('PCHSTOP'):
+			raise SCons.Errors.UserError, "The PCHSTOP construction must be defined if PCH is defined."
 		if not SCons.Util.is_String(env['PCHSTOP']):
-			raise SCons.Errors.UserError("The PCHSTOP construction variable must be a string: %r" % env['PCHSTOP'])
+			raise SCons.Errors.UserError, "The PCHSTOP construction variable must be a string: %r"%env['PCHSTOP']
 
 def pch_emitter(target, source, env):
 	"""Sets up the PDB dependencies for a pch file, and adds the object
@@ -121,7 +119,7 @@ def pch_emitter(target, source, env):
 
 	target = [pch, obj] # pch must be first, and obj second for the PCHCOM to work
 
-	if 'PDB' in env and env['PDB']:
+	if env.has_key('PDB') and env['PDB']:
 		env.SideEffect(env['PDB'], target)
 		env.Precious(env['PDB'])
 
@@ -134,11 +132,11 @@ def object_emitter(target, source, env, parent_emitter):
 
 	parent_emitter(target, source, env)
 
-	if 'PDB' in env and env['PDB']:
+	if env.has_key('PDB') and env['PDB']:
 		env.SideEffect(env['PDB'], target)
 		env.Precious(env['PDB'])
 
-	if 'PCH' in env and env['PCH']:
+	if env.has_key('PCH') and env['PCH']:
 		env.Depends(target, env['PCH'])
 
 	return (target, source)
@@ -155,7 +153,7 @@ pch_builder = SCons.Builder.Builder(action='$PCHCOM', suffix='.pch', emitter=pch
 res_builder = SCons.Builder.Builder(action='$RCCOM', suffix='.res')
 
 def pdbGenerator(env, target, source, for_signature):
-	if target and 'PDB' in env and env['PDB']:
+	if target and env.has_key('PDB') and env['PDB']:
 		return ['/PDB:%s'%target[0].File(env['PDB']).get_string(for_signature),
 				'/DEBUG']
 
@@ -174,7 +172,7 @@ def win32ShlinkSources(target, source, env, for_signature):
 
 	deffile = env.FindIxes(source, "WIN32DEFPREFIX", "WIN32DEFSUFFIX")
 	for src in source:
-		if deffile is not None and src == deffile:
+		if src == deffile:
 			# Treat this source as a .def file.
 			listCmd.append("/def:%s" % src.get_string(for_signature))
 		else:
@@ -189,7 +187,7 @@ def win32LibEmitter(target, source, env):
 	no_import_lib = env.get('no_import_lib', 0)
 	
 	if not dll:
-		raise SCons.Errors.UserError("A shared library should have exactly one target with the suffix: %s" % env.subst("$SHLIBSUFFIX"))
+		raise SCons.Errors.UserError, "A shared library should have exactly one target with the suffix: %s" % env.subst("$SHLIBSUFFIX")
 
 	if env.get("WIN32_INSERT_DEF", 0) and \
 	   not env.FindIxes(source, "WIN32DEFPREFIX", "WIN32DEFSUFFIX"):
@@ -199,7 +197,7 @@ def win32LibEmitter(target, source, env):
 									  "SHLIBPREFIX", "SHLIBSUFFIX",
 									  "WIN32DEFPREFIX", "WIN32DEFSUFFIX"))
 
-	if 'PDB' in env and env['PDB']:
+	if env.has_key('PDB') and env['PDB']:
 		env.SideEffect(env['PDB'], target)
 		env.Precious(env['PDB'])
 
@@ -219,19 +217,19 @@ def win32LibEmitter(target, source, env):
 def prog_emitter(target, source, env):
 	#SCons.Tool.msvc.validate_vars(env)
 	
-	if 'PDB' in env and env['PDB']:
+	if env.has_key('PDB') and env['PDB']:
 		env.SideEffect(env['PDB'], target)
 		env.Precious(env['PDB'])
 		
 	return (target,source)
 
 def RegServerFunc(target, source, env):
-	if 'register' in env and env['register']:
+	if env.has_key('register') and env['register']:
 		ret = regServerAction([target[0]], [source[0]], env)
 		if ret:
-			raise SCons.Errors.UserError("Unable to register %s" % target[0])
+			raise SCons.Errors.UserError, "Unable to register %s" % target[0]
 		else:
-			print("Registered %s successfully" % target[0])
+			print("Registered %s sucessfully" % target[0])
 		return ret
 	return 0
 

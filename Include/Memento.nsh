@@ -186,7 +186,7 @@ A usage example can be found in `Examples\Memento.nsi`.
 ;
 ; MementoSection<ReadWrite><Int|Marker>
 ;
-; Replaceable macros that allow custom storage methods to be used.
+; Replacable macros that allow custom storage methods to be used.
 ;
 
 !ifmacrondef MementoSectionReadInt

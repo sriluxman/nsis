@@ -150,11 +150,6 @@ static int get(input * in, filepos * pos)
     }
     /* FIXME: do input charmap translation. We should be returning
      * Unicode here. */
-    if (c == '\0')
-    {
-      err_zerochar(pos);
-      return EOF;
-    }
     return c;
   } else
     return EOF;
@@ -202,7 +197,7 @@ enum {
   c_U,                          /* unnumbered-chapter heading */
   c_W,                          /* Web hyperlink */
   c_L,                          /* Relative/local hyperlink */
-  c_b,                          /* bulleted list */
+  c_b,                          /* bulletted list */
   c_bold,
   c_c,                          /* code */
   c_cfg,                        /* configuration directive */
@@ -293,7 +288,7 @@ static void match_kw(token * tok)
     { "W", c_W },                    /* Web hyperlink */
     { "\\", c__escaped },            /* escaped backslash (\\) */
     { "_", c__nbsp },                /* nonbreaking space (\_) */
-    { "b", c_b },                    /* bulleted list */
+    { "b", c_b },                    /* bulletted list */
     { "bold", c_bold },
     { "c", c_c },                    /* code */
     { "cfg", c_cfg },                /* configuration directive */
@@ -351,13 +346,13 @@ static void match_kw(token * tok)
   {
     /* We expect hex characters thereafter. */
     wchar_t *p = tok->text + 1;
-    int n = 0, seen_a_char = 0;
+    int n = 0;
     while (*p && ishex(*p))
     {
       n = 16 * n + fromhex(*p);
-      p++, seen_a_char++;
+      p++;
     }
-    if (!*p && seen_a_char)
+    if (!*p)
     {
       tok->cmd = c_u;
       tok->aux = n;
@@ -653,25 +648,8 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
   const rdstring nullrs = { 0, 0, NULL };
   wchar_t uchr;
 
-  t = get_token(in);
-  already = TRUE;
-
-  /*
-   * Ignore tok_white if it appears at the very start of the file.
-   *
-   * At the start of most paragraphs, tok_white is guaranteed not to
-   * appear, because get_token will have folded it into the
-   * preceding tok_eop (since a tok_eop is simply a sequence of
-   * whitespace containing at least two newlines).
-   *
-   * The one exception is if there isn't a preceding tok_eop, i.e.
-   * if the very first paragraph begins with something that lexes as
-   * a tok_white. Easiest way to get round that is to ignore it
-   * here, by unsetting the 'already' flag which will force a new
-   * token to be fetched below.
-   */
-  if (t.type == tok_white)
-      already = FALSE;
+  t.text = NULL;
+  already = FALSE;
 
   /*
    * Loop on each paragraph.
@@ -1076,19 +1054,7 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
       case tok_rbrace:
         sitem = stk_pop(parsestk);
         if (!sitem)
-        {
-#ifdef HALIBUT_UPSTREAM
-          /*
-           * This closing brace could have been an
-           * indication that the cross-paragraph stack
-           * wants popping. Accordingly, we treat it here
-           * as an indication that the paragraph is over.
-           */
-          already = TRUE;
-          goto finished_para;
-#endif
           error(err_unexbrace, &t.pos);
-        }
         else
         {
           if (sitem->type & stack_ualt)
@@ -1101,22 +1067,10 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
             style = word_Normal;
             spcstyle = word_WhiteSpace;
           }
-          if (sitem->type & stack_idx ) {
-            rdadds(&indexstr, L"");
+          if (sitem->type & stack_idx )          {
             indexword->text = ustrdup(indexstr.text);
             if (index_downcase)
-            {
-#ifdef HALIBUT_UPSTREAM
-              word *w;
               ustrlow(indexword->text);
-              ustrlow(indexstr.text);
-              for (w = idxwordlist; w; w = w->next)
-                if (w->text)
-                  ustrlow(w->text);
-#else
-              ustrlow(indexword->text);
-#endif
-            }
             indexing = FALSE;
             rdadd(&indexstr, L'\0');
             index_merge(idx, FALSE, indexstr.text, idxwordlist);
@@ -1252,7 +1206,7 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
           {
             if (wd.type == word_Normal)
             {
-              time_t thetime = current_time();
+              time_t thetime = time(NULL);
               struct tm *broken = localtime(&thetime);
               already = TRUE;
               wdtext = ustrftime(NULL, broken);
@@ -1275,7 +1229,7 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
             }
             if (wd.type == word_Normal)
             {
-              time_t thetime = current_time();
+              time_t thetime = time(NULL);
               struct tm *broken = localtime(&thetime);
               wdtext = ustrftime(rs.text, broken);
               wd.type = style;
@@ -1426,12 +1380,8 @@ static void read_file(paragraph *** ret, input * in, indexdata * idx, tree234 *m
           break;
         case c_u:
           uchr = t.aux;
-          if (uchr == 0)
-          {
-            err_zerochar(&t.pos);
-            break;
-          }
-          utext[0] = uchr, utext[1] = 0;
+          utext[0] = uchr;
+          utext[1] = 0;
           wd.type = style;
           wd.breaks = FALSE;
           wd.alt = NULL;

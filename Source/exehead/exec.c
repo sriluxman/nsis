@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,6 +60,15 @@ extra_parameters plugin_extra_parameters = {
 HRESULT g_hres;
 #endif
 
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH
+extern int progress_bar_pos, progress_bar_len;
+
+extern BOOL isAsyncProgressUpdateActive;
+extern HWND hWndMainPage;
+extern HWND globalHWND;
+// *** BR_END ***
+
 static int NSISCALL ExecuteEntry(entry *entry_);
 
 /**
@@ -96,12 +105,20 @@ int NSISCALL ExecuteCodeSegment(int pos, HWND hwndProgress)
       rv-=t; // set rv to delta for progress adjustment
     }
 
-    if (hwndProgress)
-    {
-      extern int progress_bar_pos, progress_bar_len;
-      progress_bar_pos+=rv;
-      SendMessage(hwndProgress,PBM_SETPOS,MulDiv(progress_bar_pos,30000,progress_bar_len),0);
-    }
+	if (hwndProgress)
+	{
+	  progress_bar_pos+=rv;
+
+      // *** BR_START ***
+      // Added/Modified by B&R Industrial Automation GmbH
+	  if (hwndProgress > 1)
+	  {
+	    SendMessage(hwndProgress,PBM_SETPOS,MulDiv(progress_bar_pos,30000,progress_bar_len),0);
+	  }
+
+	  UpdateProgressInMainPage(MulDiv(progress_bar_pos,30000,progress_bar_len));
+      // *** BR_END ***
+	}
   }
   return 0;
 }
@@ -312,10 +329,9 @@ static int NSISCALL ExecuteEntry(entry *entry_)
     break;
 #endif//NSIS_CONFIG_VISIBLE_SUPPORT
     case EW_SETFLAG:
-      if (parm2 <= 0)
+      if (!parm2)
       {
-        if (parm2 == 0)
-          FIELDN(g_exec_flags_last_used,parm0)=FIELDN(g_exec_flags,parm0);
+        FIELDN(g_exec_flags_last_used,parm0)=FIELDN(g_exec_flags,parm0);
         FIELDN(g_exec_flags,parm0)=GetIntFromParm(1);
         log_printf3(_T("SetFlag: %d=%d"),parm0,FIELDN(g_exec_flags,parm0));
       }
@@ -541,7 +557,10 @@ static int NSISCALL ExecuteEntry(entry *entry_)
           mystrcpy(g_usrvars[0],buf2); // restore $0
 
           // Modified by ramon 23 May 2003
-          switch (my_MessageBox(buf1, parm0>>3))
+          // *** BR_START ***
+		  // Modified by B&R Industrial Automation GmbH	
+		  switch (my_MessageBox(buf1, parm0>>3, TRUE))
+		  // *** BR_END ***
           {
             case IDRETRY:
               log_printf(_T("File: error, user retry"));
@@ -583,7 +602,10 @@ static int NSISCALL ExecuteEntry(entry *entry_)
             GetNSISString(buf0,LANG_ERRORDECOMPRESSING);
           }
           log_printf2(_T("%s"),buf0);
-          my_MessageBox(buf0,MB_OK|MB_ICONSTOP|(IDOK<<21));
+          // *** BR_START ***
+		  // Modified by B&R Industrial Automation GmbH	
+          my_MessageBox(buf0,MB_OK|MB_ICONSTOP|(IDOK<<21),FALSE);
+		  // *** BR_END ***
           return EXEC_ERROR;
         }
       }
@@ -604,7 +626,10 @@ static int NSISCALL ExecuteEntry(entry *entry_)
         int v;
         TCHAR *buf3=GetStringFromParm(0x31);
         log_printf3(_T("MessageBox: %d,\"%s\""),parm0,buf3);
-        v=my_MessageBox(buf3,parm0);
+        // *** BR_START ***
+        // Modified by B&R Industrial Automation GmbH	
+        v=my_MessageBox(buf3,parm0,FALSE);
+		// *** BR_END ***
         if (v)
         {
           if (v==parm2)
@@ -763,7 +788,10 @@ static int NSISCALL ExecuteEntry(entry *entry_)
           if (!s)
           {
             log_printf2(_T("Exch: stack < %d elements"),parm2);
-            my_MessageBox(GetNSISStringTT(LANG_INSTCORRUPTED),MB_OK|MB_ICONSTOP|(IDOK<<21));
+            // *** BR_START ***
+            // Modified by B&R Industrial Automation GmbH	
+			my_MessageBox(GetNSISStringTT(LANG_INSTCORRUPTED),MB_OK|MB_ICONSTOP|(IDOK<<21),FALSE);
+			// *** BR_END ***
             return EXEC_ERROR;
           }
           mystrcpy(buf0,s->text);
@@ -1175,7 +1203,10 @@ static int NSISCALL ExecuteEntry(entry *entry_)
     case EW_REBOOT:
       if (parm0!=0xbadf00d)
       {
-        my_MessageBox(GetNSISStringTT(LANG_INSTCORRUPTED),MB_OK|MB_ICONSTOP|(IDOK<<21));
+        // *** BR_START ***
+        // Modified by B&R Industrial Automation GmbH	
+		my_MessageBox(GetNSISStringTT(LANG_INSTCORRUPTED),MB_OK|MB_ICONSTOP|(IDOK<<21),FALSE);
+		// *** BR_END ***
         return EXEC_ERROR;
       }
 
@@ -1769,9 +1800,204 @@ static int NSISCALL ExecuteEntry(entry *entry_)
       break;
     }
 #endif //NSIS_LOCKWINDOW_SUPPORT
+    
+    // *** BR_START ***
+    // Added by B&R Industrial Automation GmbH	
+	case EW_GETPROGRESS:
+    {
+		TCHAR *progress=var0;
+        myitoa(progress, MulDiv(progress_bar_pos,30000,progress_bar_len));
+		break;
+	}
+	
+	case EW_SET_SUBPROGRESS:
+    {
+		SetSubProgress();
+		break;
+	}
+
+	case EW_ENABLE_ASYNC_PROGRESS_UPDATE:
+	{
+		EnableAsyncProgressUpdate();
+		break;
+	}
+    
+	case EW_DISABLE_ASYNC_PROGRESS_UPDATE:
+	{
+		DisableAsyncProgressUpdate();
+		break;
+	}
+	
+	case EW_UPDATE_INFO_TEXT_IN_MAIN_PAGE:
+	{
+		UpdateInfoTextInMainPage();
+		break;
+	}
+	
+	case EW_UPDATE_INFO_TEXT_FOR_SUB_PROGRESS:
+	{
+		UpdateInfoTextForSubProgress();
+		break;
+	}
+	
+	case EW_ENABLE_PROGRESS_BAR_MARQUEE_MODE:
+	{
+		EnableProgressBarMarqueeMode();
+		break;
+	}
+
+	case EW_DISABLE_PROGRESS_BAR_MARQUEE_MODE:
+	{
+		DisableProgressBarMarqueeMode();
+		break;
+	}
+    // *** BR_END ***
   }
 
   g_exec_flags.exec_error += exec_error;
 
   return 0;
 }
+
+// *** BR_START ***
+// Added by B&R Industrial Automation GmbH	
+void EnableAsyncProgressUpdate()
+{
+  DisableProgressBarMarqueeMode();
+  isAsyncProgressUpdateActive	= TRUE;
+  hWndMainPage					= (HWND) GetIntFromParm(0);  
+}
+
+void DisableAsyncProgressUpdate()
+{
+  UpdateProgressInMainPage(MAX_PROGRESS);
+  isAsyncProgressUpdateActive	= FALSE;
+  hWndMainPage					= NULL;
+}
+
+void UpdateInfoTextInMainPage()
+{
+  if (hWndMainPage)
+  {
+    CommInterfaceInfoText	commData;
+    COPYDATASTRUCT			copyData;
+    TCHAR*					textBuffer;
+
+    hWndMainPage	= (HWND) GetIntFromParm(0);
+    textBuffer		= GetStringFromParm(0x1);
+    lstrcpyn(commData.infoText, textBuffer, MAX_INFO_TEXT_SIZE);
+
+    copyData.dwData	= COMM_INTERFACE_ID_INFOTEXT;
+    copyData.cbData	= sizeof (CommInterfaceInfoText);
+    copyData.lpData	= &commData;
+    SendMessage(hWndMainPage, WM_COPYDATA, NULL, (LPARAM) &copyData);	
+  }
+}
+
+void UpdateInfoTextForSubProgress()
+{
+  TCHAR* textBuffer;
+
+  textBuffer = GetStringFromParm(0x0);
+
+  if (textBuffer)
+  {
+	HWND hWndPage = FindWindowEx(globalHWND, NULL, "#32770", "");
+
+	if (hWndPage)
+	{
+	  HWND hWndInfoText = GetDlgItem(hWndPage, IDC_INFOTEXT2);
+
+	  if (hWndInfoText)
+	  {
+	    SendMessage(hWndInfoText, WM_SETTEXT, 0, (LPARAM) textBuffer);
+	  }
+	}
+  }
+}
+
+void SetSubProgress()
+{
+	int newProgress = (int) GetIntFromParm(0);
+
+	HWND hWndPage = FindWindowEx(globalHWND, NULL, "#32770", "");
+
+	if (hWndPage)
+	{
+	  HWND hWndProgress = GetDlgItem(hWndPage, IDC_PROGRESS2);
+
+	  if (hWndProgress)
+	  {
+	    SendMessage(hWndProgress, PBM_SETPOS, newProgress, 0);
+	  }
+	}
+}
+
+void UpdateProgressInMainPage(int progress)
+{
+  if (isAsyncProgressUpdateActive && hWndMainPage)
+  {
+	CommInterfaceProgress 	commData;
+	COPYDATASTRUCT			copyData;
+
+	commData.progress	= progress;
+	copyData.dwData		= COMM_INTERFACE_ID_PROGRESS;
+	copyData.cbData		= sizeof (CommInterfaceProgress);
+	copyData.lpData		= &commData;
+	SendMessage(hWndMainPage, WM_COPYDATA, NULL, (LPARAM) &copyData);
+  }
+}
+
+void EnableProgressBarMarqueeMode()
+{
+  HWND hWnd;
+  LONG style; 
+
+  if (GetProgressBarInfo(&hWnd, &style))
+  {
+	  style	&= ~PBS_SMOOTH;
+	  style	|= PBS_MARQUEE;
+	  SetWindowLong(hWnd, GWL_STYLE, style);
+	  UpdateWindow(hWnd);
+	  SendMessage(hWnd, PBM_SETMARQUEE, (WPARAM) TRUE, (LPARAM) 30);  
+  }    
+}
+
+void DisableProgressBarMarqueeMode()
+{
+  HWND hWnd;
+  LONG style; 
+
+  if (GetProgressBarInfo(&hWnd, &style))
+  {
+	  style	&= ~PBS_MARQUEE;
+	  style	|= PBS_SMOOTH;
+	  SetWindowLong(hWnd, GWL_STYLE, style);
+	  UpdateWindow(hWnd);
+	  SendMessage(hWnd, PBM_SETRANGE32, (WPARAM) 0, (LPARAM) MAX_PROGRESS);  
+	  SendMessage(hWnd, PBM_SETPOS, (WPARAM) 0, (LPARAM) 0);
+  }
+}
+
+BOOL GetProgressBarInfo(HWND* hWnd, LONG* style)
+{
+  HWND hWndPage = FindWindowEx(globalHWND, NULL, "#32770", "");
+  
+  if (hWndPage)
+  {
+    *hWnd = GetDlgItem(hWndPage, IDC_PROGRESS2);
+	
+	if (hWnd)
+	{
+	  *style = GetWindowLong(*hWnd, GWL_STYLE);
+	  
+	  if (*style != 0)
+	  {
+		return (TRUE);
+	  }
+	}
+  }
+  
+  return (FALSE);
+}
+// *** BR_END ***

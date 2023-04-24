@@ -3,7 +3,7 @@
  * 
  * This file is a part of NSIS.
  * 
- * Copyright (C) 1999-2023 Nullsoft and Contributors
+ * Copyright (C) 1999-2021 Nullsoft and Contributors
  * 
  * Licensed under the zlib/libpng license (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ LONG NSISCALL RegKeyCreate(HKEY hBase, LPCTSTR SubKey, REGSAM RS, HKEY*phKey);
 void NSISCALL myRegGetStr(HKEY root, const TCHAR *sub, const TCHAR *name, TCHAR *out, UINT altview);
 
 
-#define GetWinVerNTDDIMajMin() ( *(USHORT*)(&g_osinfo.WVMin) )
+#define GetWinVerNTDDIMajMin() ( *(UINT16*)(&g_osinfo.WVMin) )
 #define IsWin95NT4() ( sizeof(void*) == 4 && GetWinVerNTDDIMajMin() == 0x0400 )
 #define IsWin9598ME() ( sizeof(TCHAR) == 1 && g_osinfo.WVProd == 0 )
 #define IsWin9598() ( IsWin9598ME() && GetWinVerNTDDIMajMin() < MAKEWORD(90, 4) )
@@ -132,7 +132,10 @@ DWORD NSISCALL CreateNormalDirectory(LPCTSTR path);
 
 HANDLE NSISCALL myCreateProcess(TCHAR *cmd);
 BOOL NSISCALL myShellExecuteEx(SHELLEXECUTEINFO*pSEI);
-int NSISCALL my_MessageBox(const TCHAR *text, UINT type);
+// *** BR_START ***
+// Modified by B&R Industrial Automation GmbH	
+int NSISCALL my_MessageBox(const TCHAR *text, UINT type, BOOL force);
+// *** BR_END ***
 
 void NSISCALL myDelete(TCHAR *buf, int flags);
 
@@ -175,7 +178,6 @@ enum myGetProcAddressFunctions {
   MGA_InitiateShutdown,
   MGA_SHGetKnownFolderPath,
   MGA_IsUserAnAdmin,
-  MGA_SHCloneSpecialIDList,
 #ifndef _WIN64
   MGA_IsOS,
 #endif

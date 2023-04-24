@@ -1,0 +1,4 @@
+{
+  "name": "NSIS Dev Container",
+  "dockerFile": "Dockerfile"
+}
